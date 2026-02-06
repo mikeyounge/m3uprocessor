@@ -57,20 +57,25 @@ Only includes processes that are complete in the code base.
 
 ```mermaid
 flowchart TD
-    A[Orchestrator Called - RunManager base_dir] --> B[RunManager initialize]
-    B --> C[ConfigLoader load_all]
+    A[orchestrator.main] --> B[RunManager.initialize]
+    B --> C[ConfigLoader.load_all]
     C --> D{Hard configs missing?}
-    D -->|Yes| E[ConfigError Fail Fast]
-    D -->|No| F[get_local_datetime run_id + date_folder]
-    F --> G[Create log_root logs/YYYY-MM-DD/RunID + diagnostics/]
-    G --> H[setup_logging JSON structured run_id prefixed]
+    D -->|Yes| E[ConfigError raised templates created logged]
+    D -->|No| F[get_local_datetime for run_id date_folder]
+    F --> G[Create log_root logs YYYY-MM-DD run_id diagnostics]
+    G --> H[setup_logging JSON structured main processor sports_api xml_filter]
     H --> I{cleanup_on_startup?}
-    I -->|Yes| J[cleanup_old_runs delete > retention_days]
-    J --> K[update_current_symlink atomic tmp→current]
+    I -->|Yes| J[cleanup_old_runs delete folders retention_days]
+    J --> K[update_current_symlink logs current latest run]
     I -->|No| K
-    K --> L[Return RunContext run_id dirs config loggers]
-    
-    L --> M[Business Logic Entry Using RunContext]
+    K --> L[Build RunContext paths settings config loggers]
+
+    L --> M[DiagnosticCollector base_log_dir date_folder run_id]
+    L --> N[build_sports_lookups sports_config.json]
+    N --> O[SportsLookups leagues allhints teamindex]
+    O --> P[SportsLineupManager per league lazy Phase 2]
+    P --> Q[Phase 2 M3U processing ChannelProcessor XMLTV sports.xml]
+
 ```
 
 🛠️ Pseudocode Pipeline
