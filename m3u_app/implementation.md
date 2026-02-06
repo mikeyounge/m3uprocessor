@@ -50,14 +50,24 @@ opt/m3uapp/
 └── cron.sh [PHASE 4]
 ```
 
-🔄 Workflow (Mermaid)
+🔄 Workflow Business Logic
 
 ```mermaid
-graph LR
-    A[cron.sh] --> B[RunManager<br/>entities.ConfigPaths]
-    B --> C[Logger.setup<br/>logger.py]
-    C --> D[ConfigLoader.load_all<br/>configloader.py<br/>Hard fail=exit 1]
-    D --> E[entities.GameRecord<br/>entities.ChannelRecord<br/>entities.py]
+flowchart TD
+    A[Orchestrator Called<br/>RunManager(base_dir)] --> B[RunManager.initialize()]
+    B --> C[ConfigLoader.load_all()]
+    C --> D{{Hard configs<br/>missing?}}
+    D -->|Yes| E[ConfigError<br/>Fail Fast]
+    D -->|No| F[get_local_datetime<br/>run_id + date_folder]
+    F --> G[Create log_root<br/>logs/YYYY-MM-DD/RunID<br/>+ diagnostics/]
+    G --> H[setup_logging<br/>JSON structured<br/>run_id prefixed]
+    H --> I{config.cleanup?}
+    I -->|Yes| J[_cleanup_old_runs<br/>delete > retention_days]
+    J --> K[_update_current_symlink<br/>atomic tmp→current]
+    I -->|No| K
+    K --> L[Return RunContext<br/>run_id, dirs, config, loggers]
+    
+    L --> M[Business Logic Entry<br/>Using RunContext]
 ```
 
 🛠️ Pseudocode Pipeline
