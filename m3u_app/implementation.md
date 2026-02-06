@@ -56,20 +56,20 @@ Only includes processes that are complete in the code base.
 
 ```mermaid
 flowchart TD
-    A[Orchestrator Called<br/>RunManager(base_dir)] --> B[RunManager.initialize()]
-    B --> C[ConfigLoader.load_all()]
-    C --> D{{Hard configs<br/>missing?}}
-    D -->|Yes| E[ConfigError<br/>Fail Fast]
-    D -->|No| F[get_local_datetime<br/>run_id + date_folder]
-    F --> G[Create log_root<br/>logs/YYYY-MM-DD/RunID<br/>+ diagnostics/]
-    G --> H[setup_logging<br/>JSON structured<br/>run_id prefixed]
-    H --> I{config.cleanup?}
-    I -->|Yes| J[_cleanup_old_runs<br/>delete > retention_days]
-    J --> K[_update_current_symlink<br/>atomic tmp→current]
+    A[Orchestrator Called - RunManager base_dir] --> B[RunManager initialize]
+    B --> C[ConfigLoader load_all]
+    C --> D{Hard configs missing?}
+    D -->|Yes| E[ConfigError Fail Fast]
+    D -->|No| F[get_local_datetime run_id + date_folder]
+    F --> G[Create log_root logs/YYYY-MM-DD/RunID + diagnostics/]
+    G --> H[setup_logging JSON structured run_id prefixed]
+    H --> I{cleanup_on_startup?}
+    I -->|Yes| J[cleanup_old_runs delete > retention_days]
+    J --> K[update_current_symlink atomic tmp→current]
     I -->|No| K
-    K --> L[Return RunContext<br/>run_id, dirs, config, loggers]
+    K --> L[Return RunContext run_id dirs config loggers]
     
-    L --> M[Business Logic Entry<br/>Using RunContext]
+    L --> M[Business Logic Entry Using RunContext]
 ```
 
 🛠️ Pseudocode Pipeline
