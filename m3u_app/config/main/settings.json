@@ -1,0 +1,10 @@
+{
+  "network_timeout": 30,
+  "max_retries": 3,
+  "retry_delay": 10,
+  "log_retention_days": 14,
+  "log_level": "DEBUG",
+  "enable_compression": true,
+  "cleanup_on_startup": true,
+  "timezone": "America/Boise"
+}

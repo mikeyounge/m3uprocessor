@@ -1,0 +1,6 @@
+{
+  "nginx_dir": "opt/m3u_app/tvheadend/web",
+  "tvh_xml_dir": "/opt/appdata/tvheadend/data", 
+  "log_dir": "/opt/m3u_app/logs",
+  "diagnostics_dir": "/opt/m3u_app/logs/diagnostics"
+}

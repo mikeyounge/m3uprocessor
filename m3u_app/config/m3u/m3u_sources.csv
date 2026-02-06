@@ -1,0 +1,21 @@
+URL,Output Name,Description
+http://drewlive2423.duckdns.org:8081/DrewLive/MoveOnJoy.m3u8,DrewLiveMoveOnJoy,DrewLive MoveOnJoy
+https://raw.githubusercontent.com/iptv-org/iptv/refs/heads/master/streams/us.m3u,IPTVUS,IPTV US
+https://raw.githubusercontent.com/iptv-org/iptv/refs/heads/master/streams/us_moveonjoy.m3u,IPTVMoveOnJoy,IPTV MoveOnJoy
+http://drewlive2423.duckdns.org:8081/DrewLive/A1x.m3u8,DrewLiveA1x,DrewLive A1x
+http://drewlive2423.duckdns.org:8081/DrewLive/FSTV24.m3u8,DrewLiveFSTV24,DrewLive FSTV24
+http://drewlive2423.duckdns.org:8081/DrewLive/LGTV.m3u8,DrewLiveLGTV,DrewLive LGTV
+http://drewlive2423.duckdns.org:8081/DrewLive/MadTitan.m3u8,DrewLiveMadTitan,DrewLive MadTitan
+http://drewlive2423.duckdns.org:8081/DrewLive/Pixelsports.m3u8,DrewLivePixelSports,DrewLive Pixel Sports
+http://drewlive2423.duckdns.org:8081/DrewLive/PlexTV.m3u8,DrewLivePlexTV,DrewLive Plex TV
+http://drewlive2423.duckdns.org:8081/DrewLive/PlutoTV.m3u8,DrewLivePlutoTV,DrewLive PlutoTV
+http://drewlive2423.duckdns.org:8081/DrewLive/Roku.m3u8,DrewLiveRoku,DrewLive Roku
+http://drewlive2423.duckdns.org:8081/DrewLive/SamsungTVPlus.m3u8,DrewLiveSamsungTVPlus,DrewLive SamsungTVPlus
+http://drewlive2423.duckdns.org:8081/DrewLive/SharkStreams.m3u8,DrewLiveSharkStreams,DrewLive SharkStreams
+http://drewlive2423.duckdns.org:8081/DrewLive/SportsWebcast.m3u8,DrewLiveSportsWebcast,DrewLive SportsWebcast
+http://drewlive2423.duckdns.org:8081/DrewLive/StreamEast.m3u8,DrewLiveStreamEast,DrewLive StreamEast
+http://drewlive2423.duckdns.org:8081/DrewLive/StreamedSU.m3u8,DrewLiveStreamedSU,DrewLive StreamedSU
+http://drewlive2423.duckdns.org:8081/DrewLive/TheTVApp.m3u8,DrewLiveTheTVApp,DrewLive TheTVApp
+http://drewlive2423.duckdns.org:8081/DrewLive/TubiTV.m3u8,DrewLiveTubiTV,DrewLive TubiTV
+http://drewlive2423.duckdns.org:8081/DrewLive/TVPass.m3u,DrewLiveTVPass,DrewLive TVPass
+http://drewlive2423.duckdns.org:8081/DrewLive/Xumo.m3u8,DrewLiveXumo,DrewLive Xumo
