@@ -19,27 +19,28 @@ Guidelines:
 opt/m3uapp/
 ├── config/
 │ ├── main/
-│ │ ├── paths.json [HARD FAIL]
-│ │ └── settings.json [HARD FAIL]
+│ │ ├── paths.json [HARD]
+│ │ └── settings.json [HARD]
 │ ├── m3u/
-│ │ ├── m3u_sources.csv [HARD FAIL]
-│ │ ├── xml_sources.csv [HARD FAIL]
-│ │ ├── tvg_name_list.csv [SOFT FAIL]
-│ │ ├── channel_list.csv [SOFT FAIL]
-│ │ ├── exclude_channels.txt [SOFT FAIL]
-│ │ ├── exclude_groups.txt [SOFT FAIL]
-│ │ ├── exclude_patterns.txt [SOFT FAIL]
-│ │ └── parse_exclusions.txt [SOFT FAIL]
+│ │ ├── m3u_sources.csv [HARD]
+│ │ ├── xml_sources.csv [HARD]
+│ │ ├── tvg_name_list.csv [SOFT]
+│ │ ├── channel_list.csv [SOFT]
+│ │ ├── exclude_channels.txt [SOFT]
+│ │ ├── exclude_groups.txt [SOFT]
+│ │ ├── exclude_patterns.txt [SOFT]
+│ │ └── parse_exclusions.txt [SOFT]
 │ ├── sports/
-│ │ ├── sports_config.json [HARD FAIL]
-│ │ └── api_key.txt [HARD FAIL]
+│ │ ├── sports_config.json [HARD]
+│ │ └── api_key.txt [HARD]
 │ └── epg/
-│ └── category_map.json [SOFT FAIL]
+│ └── category_map.json [SOFT]
 ├── src/
 │ └── core/
-│ ├── entities.py [✅ COMPLETE]
+│ ├── entities.py [🎯 PENDING VERIFICATION]
 │ ├── logger.py [✅ COMPLETE]
 │ ├── config_loader.py [✅ COMPLETE]
+│ ├── runmanager.py [✅ COMPLETE]
 │ ├── diagnostic_collector.py [PENDING]
 │ ├── lineup_manager.py [PENDING]
 │ └── sports_lookups.py [PENDING]
@@ -51,6 +52,7 @@ opt/m3uapp/
 ```
 
 🔄 Workflow Business Logic
+Only includes processes that are complete in the code base.
 
 ```mermaid
 flowchart TD
@@ -71,6 +73,7 @@ flowchart TD
 ```
 
 🛠️ Pseudocode Pipeline
+Paraphrased code for context
 
 `src/core/runmanager.py`
 
@@ -216,9 +219,10 @@ class ConfigLoader:
 
 | Phase              | Module          | Status     | Notes                                    |
 |--------------------|-----------------|------------|------------------------------------------|
-| Phase 0: Bootstrap | setup.py        | ✅ Complete | 12 config files, exact outline structure |
-| Phase 1: Core      | configloader.py | ⚠️ Drafted | Needs exact hard/soft fail logic         |
-|                    | entities.py     | ❌ Pending  | NEXT - 8 dataclasses                     |
+| Phase 1: Core      | configloader.py | Completed | loads and fails as designed.         |
+|                    | logger.py       | Completed | outputs logs in the desired format   |
+|                    | runmanager.py   | Completed | Creates log structure with local timezones |
+|                    | entities.py     | ❌ In-Process  | NEXT - 7 dataclasses: verify structure compared to outline                    |
 
 🎯 Next Single Step
 src/core/entities.py - 8 dataclasses EXACT from outline:
