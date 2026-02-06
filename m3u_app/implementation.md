@@ -9,9 +9,10 @@ Guidelines:
 - Implementation Table follows progress of implementation, adding more context to the phases
 - Todo list is to track what has yet to be done
 
-**Status:** Active | **Last Updated:** 2026-02-05 | **Progress:** 4/24 modules
 
-## File Hierarchy (Live)
+**Status:** Active | **Last Updated:** 2026-02-06 | **Progress:** 6/7 core modules
+Phase 1: Core [6/7] - sports_lookups.py
+
 
 📋 File Hierarchy (Live)
 
@@ -37,12 +38,12 @@ opt/m3uapp/
 │ └── category_map.json [SOFT]
 ├── src/
 │ └── core/
-│ ├── entities.py [🎯 PENDING VERIFICATION]
+│ ├── entities.py [✅ COMPLETE]
 │ ├── logger.py [✅ COMPLETE]
 │ ├── config_loader.py [✅ COMPLETE]
 │ ├── runmanager.py [✅ COMPLETE]
-│ ├── diagnostic_collector.py [PENDING]
-│ ├── lineup_manager.py [PENDING]
+│ ├── diagnostic_collector.py [✅ COMPLETE]
+│ ├── lineup_manager.py [✅ COMPLETE]
 │ └── sports_lookups.py [PENDING]
 │ ├── m3u/ [PHASE 2]
 │ └── epg/ [PHASE 3]
@@ -215,6 +216,80 @@ class ConfigLoader:
     def _write(self, p: Path, data): with open(p.with_suffix('.tmp'), 'w') as f: json.dump(data, f, indent=2) if isinstance(data,dict) else f.write(data); os.rename(p.with_suffix('.tmp'), p)
 ```
 
+`/src/core/diagnostic_collector.py`
+```python
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import List, Dict
+
+@dataclass
+class DiagnosticCollector:
+    base_dir: Path
+    run_id: str
+    unmapped_games: List[Dict] = field(default_factory=list)
+    missing_teams: List[Dict] = field(default_factory=list)
+    unmapped_categories: Dict[str, int] = field(default_factory=dict)
+
+    def record_failure(self, kind: str, payload: Dict): ...
+    def increment_category(self, name: str): ...
+    def dump_all(self): ...
+```
+
+`/src/core/lineup_manager.py`
+```python
+from dataclasses import dataclass
+
+@dataclass
+class Lineup:
+    id: int
+    teams: set[str]
+    games: list[str]
+
+
+class SportsLineupManager:
+    def __init__(self, league_key, service_prefix):
+        self.league = league_key
+        self.prefix = service_prefix
+        self.lineups = []
+
+    def assign_lineup(self, game):
+        teams = sorted([game.team1_canonical, game.team2_canonical])
+        if existing := self._find_lineup_with_unique_teams(teams):
+            return self._assign_to_existing(existing, teams)
+        return self._create_new_lineup(teams)
+
+    def _find_lineup_with_unique_teams(self, teams): pass
+    def _assign_to_existing(self, lineup, teams): pass
+    def _create_new_lineup(self, teams): pass
+
+    def get_lineup_summary(self): pass
+```
+
+`/src/core/sports_lookups.py`
+```python
+from typing import Dict, Optional
+from .entities import TeamInfo, LeagueConfig, SportsLookups
+
+# Immutable lookup schema (config → fast O(1) maps)
+def build_sports_lookups(cfg: Dict) -> SportsLookups:
+    leagues, hints, teams = {}, {}, {}
+    for league, data in cfg.items():
+        lcfg = LeagueConfig(...)
+        leagues[league] = lcfg
+        for canon, syns in data["teams"].items():
+            info = TeamInfo(canon, league, syns)
+            for name in [canon, *syns]: teams[name.lower()] = info
+        for hint in data["hints"]: hints[hint.lower()] = league
+    return SportsLookups(leagues=leagues, allhints=hints, teamindex=teams)
+
+# Team resolution (input name → TeamInfo)
+def find_synonym_in_dict(name: str, index: Dict[str, TeamInfo]) -> Optional[TeamInfo]:
+    if name.lower() in index: return index[name.lower()]
+    for info in index.values():
+        if name.lower() in map(str.lower, info.synonyms): return info
+    return None
+```
+
 📊 Implementation Status
 
 | Phase              | Module          | Status     | Notes                                    |
@@ -222,10 +297,14 @@ class ConfigLoader:
 | Phase 1: Core      | configloader.py | Completed | loads and fails as designed.         |
 |                    | logger.py       | Completed | outputs logs in the desired format   |
 |                    | runmanager.py   | Completed | Creates log structure with local timezones |
-|                    | entities.py     | ❌ In-Process  | NEXT - 7 dataclasses: verify structure compared to outline                    |
+|                    | diagnostic_collector.py | Completed | Creates individual diagnostic logs |
+|                    | lineup_manager.py | Completed | Creates and manages the lineups for channel assignments |
+|                    | entities.py     | Completed | 7 dataclasses |
+|                    | sports_lookups.py | Completed | Creates a sports lookup dictionary using the 3 entities |
+| Phase 2: M3U       | parser.py        | Pending | |
 
 🎯 Next Single Step
-src/core/entities.py - 8 dataclasses EXACT from outline:
+src/m3u/parser.py - Parse m3u records in to ChannelRecord:
 
 1. ChannelRecord - Per M3U, mutable, cleared after each provider
 2. GameRecord - Global, persists til sports.xml
