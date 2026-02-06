@@ -65,262 +65,141 @@ graph LR
 `src/core/runmanager.py`
 
 ```python
-src/core/runmanager.py - COMPLETE MODULE PSEUDOCODE
+from .config_loader import ConfigLoader
+from .logger import setup_logging, get_local_datetime, LOCAL_FORMAT, DATE_FOLDER_FORMAT
+from dataclasses import dataclass
+from typing import Dict
+import os, shutil
 
-from logger import setup_logging, get_local_datetime, LOCAL_FORMAT
-from configloader import ConfigLoader
+@dataclass
+class RunContext:
+    run_id: str; date_folder: str; log_dir: str; diagnostics_dir: str
+    config_loader: ConfigLoader; loggers: Dict[str, object]
 
 class RunManager:
-    def __init__(self, config: ConfigLoader):
-        self.config = config
-        tz = zoneinfo.ZoneInfo(config.settings.timezone)
-        now = get_local_datetime(config.settings.timezone)
-        
-        self.runid = now.strftime(LOCAL_FORMAT)        # 2026-02-05_19-42-00
-        self.datefolder = now.strftime("%Y-%m-%d")     # 2026-02-05
+    def __init__(self, base_dir: str):
+        self.base_dir = base_dir
+        self.config_loader = ConfigLoader(base_dir)
+        self.context = None
     
-    def initialize_run(self) -> Dict[str, Logger]:
-        """Full run setup: cleanup → directories → logging → symlink"""
-        
-        # 1. CLEANUP old logs
-        self.cleanup_old_runs()
-        
-        # 2. CREATE directories
-        self.setup_directories()
-        
-        # 3. SETUP LOGGING (requires directories)
-        loggers = setup_logging(
-            log_dir=self.logdir,
-            run_id=self.runid,
-            tz_name=self.config.settings.timezone,
-            log_level=self.config.settings.loglevel
-        )
-        
-        # 4. CREATE symlink
-        self.update_current_symlink()
-        
-        logger = loggers["main"]
-        logger.info("Run initialized", extra={
-            "runid": self.runid,
-            "logdir": self.logdir,
-            "retention_days": self.config.settings.logretentiondays
-        })
-        
-        return loggers
+    def initialize(self) -> RunContext:
+        self.config_loader.load_all()
+        config = self.config_loader
+        run_dt = get_local_datetime(config.settings.timezone)
+        run_id, date_folder = run_dt.strftime(LOCAL_FORMAT), run_dt.strftime(DATE_FOLDER_FORMAT)
+        run_root = f"{config.paths.log_dir}/{date_folder}/{run_id}"
+        diagnostics_dir = f"{run_root}/diagnostics"; os.makedirs(diagnostics_dir, exist_ok=True)
+        loggers = setup_logging(run_root, run_id, config.settings.timezone, config.settings.log_level)
+        if config.settings.cleanup_on_startup: self._cleanup_old(config.paths.log_dir, config.settings.log_retention_days, loggers["main"])
+        self._update_symlink(config.paths.log_dir, run_root, loggers["main"])
+        self.context = RunContext(run_id, date_folder, run_root, diagnostics_dir, config, loggers)
+        return self.context
     
-    def setup_directories(self):
-        """logs/2026-02-05/19-42-00/{processor.log, diagnostics/}"""
-        self.logdir = f"{self.config.paths.logbasedir}/{self.datefolder}/{self.runid}"
-        os.makedirs(f"{self.logdir}/diagnostics", exist_ok=True)
+    def _cleanup_old(self, logdir: str, days: int, logger): 
+        cutoff = get_local_datetime().date() - timedelta(days=days)
+        for date_folder in os.listdir(logdir):
+            date_path = f"{logdir}/{date_folder}"
+            if os.path.isdir(date_path) and datetime.strptime(date_folder, DATE_FOLDER_FORMAT).date() < cutoff:
+                shutil.rmtree(date_path); logger.info("Cleanup", extra={"folder": date_path})
     
-    def cleanup_old_runs(self):
-        """Delete folders > logretentiondays (config-driven)"""
-        if not self.config.settings.cleanuponstartup:
-            return
-            
-        cutoff = datetime.now() - timedelta(days=self.config.settings.logretentiondays)
-        log_base = self.config.paths.logbasedir
-        
-        for date_folder in os.listdir(log_base):
-            date_path = os.path.join(log_base, date_folder)
-            if not date_folder.match(r"\d{4}-\d{2}-\d{2}"):  # Skip non-date folders
-                continue
-                
-            try:
-                folder_date = datetime.strptime(date_folder, "%Y-%m-%d")
-                if folder_date < cutoff:
-                    shutil.rmtree(date_path)
-                    logger.info("Cleanup old run", extra={"folder": date_folder})
-            except ValueError:
-                continue  # Skip malformed folders
-    
-    def update_current_symlink(self):
-        """logs/current → logs/2026-02-05/19-42-00"""
-        current_path = f"{self.config.paths.logbasedir}/current"
-        target_path = f"{self.config.paths.logbasedir}/{self.datefolder}/{self.runid}"
-        
-        try:
-            os.unlink(current_path)
-        except FileNotFoundError:
-            pass
-            
-        os.symlink(target_path, current_path)
-
-PUBLIC PROPERTIES
-    @property
-    def diagnostics_dir(self) -> str:
-        return f"{self.logdir}/diagnostics"
-
-USAGE (orchestrator.py)
-    config = ConfigLoader().load_all()
-    run_manager = RunManager(config)
-    loggers = run_manager.initialize_run()
-    logger = loggers["processor"]
+    def _update_symlink(self, logdir: str, target: str, logger):
+        current, tmp = f"{logdir}/current", f"{logdir}/current.tmp"
+        os.symlink(target, tmp); os.replace(tmp, current); logger.info("Symlink OK", extra={"target": target})
 
 ```
 
 `src/core/logger.py`
 ```python
-src/core/logger.py - COMPLETE MODULE PSEUDOCODE
+import json, logging, os, zoneinfo
+from datetime import datetime
+from logging.handlers import RotatingFileHandler
+from typing import Dict, Any
 
-CONSTANTS
-    UTC_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
-    LOCAL_FORMAT = "%Y-%m-%d_%H-%M-%S"     # 2026-02-05_19-41-30
-    DATE_FOLDER_FORMAT = "%Y-%m-%d"        # 2026-02-05
+UTC_FORMAT, LOCAL_FORMAT, DATE_FOLDER_FORMAT = "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%d_%H-%M-%S", "%Y-%m-%d"
 
-FUNCTION get_local_datetime(tz_name="UTC") -> datetime
-    tz = zoneinfo.ZoneInfo(tz_name)
-    RETURN datetime.now(tz)
+def get_local_datetime(tz: str) -> datetime: return datetime.now(zoneinfo.ZoneInfo(tz))
 
-CLASS JsonFormatter(logging.Formatter)
-    def __init__(self, tz_name="America/Boise"):
-        self.tz = zoneinfo.ZoneInfo(tz_name)
-    
-    def format(record) -> str:
-        # Convert UTC epoch to LOCAL tz for user-friendly logs
-        local_dt = datetime.fromtimestamp(record.created, tz=self.tz)
-        
-        json_payload = {
-            "timestamp": local_dt.strftime(UTC_FORMAT),  # ISO8601
-            "level": record.levelname,
-            "module": record.name,
-            "message": record.getMessage()
-        }
-        
-        # Merge structured data from logger.debug(..., extra={"provider": "DrewLive"})
-        FOR key, value IN record.__dict__ (skip std logging fields):
-            json_payload[key] = value
-        
-        RETURN json.dumps(json_payload, separators=(",", ":"), ensure_ascii=False)
+class JsonFormatter(logging.Formatter):
+    def __init__(self, tz: str): self.tz = zoneinfo.ZoneInfo(tz)
+    def format(self, rec: logging.LogRecord) -> str:
+        local = datetime.fromtimestamp(rec.created, self.tz)
+        payload = {"timestamp": local.strftime(UTC_FORMAT), "level": rec.levelname, "module": rec.name, "message": rec.getMessage(), **{k:v for k,v in rec.__dict__.items() if k not in logging.STD_KEYS}}
+        return json.dumps(payload, separators=(",", ":"))
 
-FUNCTION _make_rotating_handler(logfile, tz_name, max_bytes=10MB, backup_count=5) -> RotatingFileHandler
-    handler = RotatingFileHandler(logfile, maxBytes=max_bytes, backupCount=backup_count, encoding="utf-8")
-    handler.setFormatter(JsonFormatter(tz_name))  # ← Configurable timezone
-    handler.setLevel(logging.DEBUG)
-    RETURN handler
+def make_handler(logfile: str, tz: str, max_bytes=10e6, backups=5) -> RotatingFileHandler:
+    h = RotatingFileHandler(logfile, maxBytes=max_bytes, backupCount=backups, encoding="utf-8")
+    h.setFormatter(JsonFormatter(tz)); h.setLevel(logging.DEBUG); return h
 
-PUBLIC FUNCTION setup_logging(log_dir, run_id, tz_name, log_level="DEBUG") -> Dict[str, Logger]
-    # Create run-specific folder: logs/2026-02-05/19-41-30/
+def setup_logging(log_dir: str, run_id: str, tz: str="UTC", level="DEBUG") -> Dict[str, logging.Logger]:
     os.makedirs(log_dir, exist_ok=True)
-    
-    level = logging.getLevelName(log_level.upper())
-    logging.basicConfig(level=logging.WARNING)  # Root logger minimal
-    
-    FUNCTION _build_logger(name, filename_suffix):
-        logger = logging.getLogger(name)
-        logger.setLevel(level)
-        logger.propagate = False
-        logger.handlers.clear()  # Avoid duplicates
-        
-        logfile = f"{log_dir}/{run_id}_{filename_suffix}.log"
-        handler = _make_rotating_handler(logfile, tz_name)
-        logger.addHandler(handler)
-        RETURN logger
-    
-    # 4x Component-specific log files (all JSON, local timezone)
-    RETURN {
-        "main": _build_logger("main", "main"),
-        "processor": _build_logger("processor", "processor"),
-        "sports_api": _build_logger("sports_api", "sports_api"),
-        "xml_filter": _build_logger("xml_filter", "xml_filter")
-    }
+    lvl = getattr(logging, level.upper())
+    logging.basicConfig(level=logging.WARNING)
+    def build(name: str, suffix: str) -> logging.Logger:
+        lg = logging.getLogger(name); lg.setLevel(lvl); lg.propagate = False; lg.handlers.clear()
+        lg.addHandler(make_handler(os.path.join(log_dir, f"{run_id}_{suffix}.log"), tz)); return lg
+    return {k: build(k, k) for k in ("main", "processor", "sports_api", "xml_filter")}
 
-PUBLIC FUNCTION get_logger(name) -> Logger
-    RETURN logging.getLogger(name)
+def get_logger(name: str) -> logging.Logger: return logging.getLogger(name)
 
-PUBLIC API
-    __all__ = ["setup_logging", "get_logger", "get_local_datetime", 
-               "UTC_FORMAT", "LOCAL_FORMAT", "DATE_FOLDER_FORMAT"]
-
-USAGE EXAMPLE (from RunManager)
-    loggers = setup_logging(
-        log_dir="/opt/m3uapp/logs/2026-02-05/19-41-30",
-        run_id="2026-02-05_19-41-30",
-        tz_name=config.settings.timezone,  # "America/Boise"
-        log_level=config.settings.loglevel  # "DEBUG"
-    )
-    
-    logger = loggers["processor"]
-    logger.debug("Processing DrewLivePixelSports", 
-                extra={"runid": run_manager.runid, "channels": 147})
-
-OUTPUT FILE STRUCTURE
-    /opt/m3uapp/logs/2026-02-05/19-41-30/
-    ├── main_2026-02-05_19-41-30.log
-    ├── processor_2026-02-05_19-41-30.log  
-    ├── sports_api_2026-02-05_19-41-30.log
-    └── xml_filter_2026-02-05_19-41-30.log
-
-JSON LOG EXAMPLE
-    {"timestamp":"2026-02-05T19:41:30-07:00","level":"DEBUG","module":"processor","runid":"2026-02-05_19-41-30","provider":"DrewLivePixelSports","channels":147,"message":"M3U parsed"}
 
 ```
 
 `src/core/config_loader.py`
 ```python
-src/core/config_loader.py - COMPLETE MODULE PSEUDOCODE
+from pathlib import Path
+from typing import Dict, List, Any
+from dataclasses import dataclass
+import json, csv, os
 
-@dataclass 
-class ConfigPaths:
-    nginxdir: str          # /opt/m3uapp/tvheadend/web
-    tvhxmldir: str         # /opt/appdata/tvheadend/data  
-    logbasedir: str        # /opt/m3uapp/logs
-    diagnosticsdir: str    # /opt/m3uapp/logs/diagnostics
+@dataclass
+class ConfigPaths: nginx_dir: str; tvh_xml_dir: str; log_dir: str; diagnostics_dir: str
+@dataclass
+class ConfigSettings: network_timeout: int; max_retries: int; retry_delay: int; log_retention_days: int; log_level: str; enable_compression: bool; cleanup_on_startup: bool; timezone: str
 
-@dataclass 
-class ConfigSettings:
-    networktimeout: int    # 30
-    maxretries: int        # 3
-    retrydelay: int        # 10
-    logretentiondays: int  # 14
-    loglevel: str          # "DEBUG"
-    enablecompression: bool# true
-    cleanuponstartup: bool # true
-    timezone: str          # "America/Boise"
+class ConfigError(Exception): pass
 
-# ConfigLoader: Two-phase config bootstrap for TVHeadend M3U processor
-
-class ConfigLoader(base_dir):
-    # Initialize directory structure: config/{main,m3u,sports,epg}
-    config_dirs = [main_dir, m3u_dir, sports_dir, epg_dir]  # Created with mkdir(parents=True)
-    
-    # Key config state variables (None until loaded, dot-notation access)
-    paths: ConfigPaths           # Critical: nginx_dir, tvh_xml_dir, log_dir, diagnostics_dir
-    settings: ConfigSettings     # Critical: timeouts, retries, log_retention_days, cleanup_on_startup  
-    m3u_sources: List[Dict]      # Critical: url,output_name,description rows
-    xml_sources: List[Dict]      # Critical: url,output_name,description rows
-    sports_config: Dict          # Critical: NFL={service_prefix,hints,api_sports,teams...}
-    api_key: str                 # Critical: api-sports.io key
-    # Soft-fail mappings/lists (empty defaults OK)
-    tvg_name_map, channel_map: Dict[str,(name,ch_no)]  # Priority rename lookups
-    exclude_channels/groups/patterns, parse_exclusions: List[str]  # Filtering rules
-    category_map: Dict[str,str]  # EPG category remapping
-    
-    hard_fail_pending: set[str]  # Tracks auto-created critical configs
-
-def ensure_all_dirs():
-    # Phase 1: Pre-create ALL 12 files with exact outline templates if missing
-    hard_configs = [paths.json, settings.json, m3u_sources.csv, xml_sources.csv, sports_config.json, api_key.txt]
-    soft_configs = [tvg_name_list.csv, channel_list.csv, exclude_*.txt, category_map.json]
-    for each_file: write_template_atomic(file)  # JSON/CSV/TXT with exact headers/content
-
-def load_all():    
-    hard_fail_pending.clear()
-    
-    # Single-pass: ALL configs (hard+soft)
-    for path, template_fn, load_fn, is_hard in all_12_configs:
-        ensure_parent_dir(path)
-        if path missing: 
-            write_template(path)  # Atomic .tmp -> rename
-            if is_hard: hard_fail_pending.add(path)
+class ConfigLoader:
+    def __init__(self, base_dir: str):
+        self.base_dir = Path(base_dir)
+        self.config_dir = self.base_dir / "config"
+        self.main_dir = self.config_dir / "main"
+        self.m3u_dir = self.config_dir / "m3u"
+        self.sports_dir = self.config_dir / "sports"
+        self.epg_dir = self.config_dir / "epg"
+        # state: paths, settings, m3u_sources:List[Dict], xml_sources:List[Dict], maps:Dicts, lists:List[str], api_key:str
         
-        # Load with retry-on-error (template corruption recovery)
-        try: load_fn()  # Populates self.m3u_sources, self.paths=ConfigPaths(**data), etc.
-        except: rewrite_template + load_fn()
+    def load_all(self):
+        configs = [
+            (self.main_dir/"paths.json", self._template_paths, self._load_paths, True),
+            (self.main_dir/"settings.json", self._template_settings, self._load_settings, True),
+            (self.m3u_dir/"m3u_sources.csv", self._template_csv, self._load_csv_lists, True),
+            (self.m3u_dir/"xml_sources.csv", self._template_csv, self._load_csv_lists, True),
+            (self.sports_dir/"sports_config.json", self._template_sports_config, self._load_json_dict, True),
+            (self.sports_dir/"api_key.txt", self._template_api_key, self._load_str, True),
+            (self.m3u_dir/"tvg_name_list.csv", self._template_csv_names, lambda: self._load_name_map(self.tvg_name_map), False),
+            (self.m3u_dir/"channel_list.csv", self._template_csv_names, lambda: self._load_name_map(self.channel_map), False),
+            (self.epg_dir/"category_map.json", self._template_category_map, self._load_json_dict, False),
+        ]
+        txt_lists = ["exclude_channels", "exclude_groups", "exclude_patterns", "parse_exclusions"]
+        
+        for attr, path in [(attr, self.m3u_dir/f"{attr}.txt") for attr in txt_lists]:
+            configs.append((path, self._template_empty_txt, lambda a=attr,p=path: self._load_txt_list(a,p), False))
+            
+        pending_hard = set()
+        for path, template, loader, is_hard in configs:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if not path.exists(): template(path); pending_hard.add(str(path)) if is_hard else None
+            loader()
+        if pending_hard: raise ConfigError(f"Missing hard configs: {pending_hard}")
     
-    # Phase 2: Hard fail if ANY critical config was auto-created
-    if hard_fail_pending:
-        raise ConfigError(f"Edit these before restart:\n{hard_fail_pending}")
+    def _load_csv_lists(self): self.m3u_sources, self.xml_sources = list(csv.DictReader(open(self.m3u_dir/"m3u_sources.csv"))), list(csv.DictReader(open(self.m3u_dir/"xml_sources.csv")))
+    def _load_name_map(self, target: Dict): for row in csv.DictReader(open(self.m3u_dir/"tvg_name_list.csv")): target[row["search_str"]] = (row["new_display_name"], row["ch_no"])
+    def _load_txt_list(self, attr: str, path: Path): setattr(self, attr, [l.strip() for l in open(path) if l.strip()])
+    def _load_json_dict(self): self.sports_config = json.load(open(self.sports_dir/"sports_config.json"))
+    
+    def _template_paths(self, p): self._write(p, {"nginx_dir":"/opt/m3uapp/tvheadend/web", "tvh_xml_dir":"/opt/appdata/tvheadend/data", "log_dir":"/opt/m3uapp/logs", "diagnostics_dir":"/opt/m3uapp/logs/diagnostics"})
+    def _template_csv(self, p): self._write(p, "url,output_name,description\n")
+    def _write(self, p: Path, data): with open(p.with_suffix('.tmp'), 'w') as f: json.dump(data, f, indent=2) if isinstance(data,dict) else f.write(data); os.rename(p.with_suffix('.tmp'), p)
 ```
 
 📊 Implementation Status
